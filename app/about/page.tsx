@@ -8,7 +8,7 @@ export default function AboutPage() {
       </h1>
       <Link
         href="/"
-        className="text-sm font-medium text-zinc-950 underline underline-offset-4 dark:text-zinc-50"
+        className="font-medium text-zinc-950 underline underline-offset-4 dark:text-zinc-50"
       >
         홈으로 돌아가기
       </Link>
