@@ -26,6 +26,9 @@ export default async function ProductsPage() {
           </li>
         ))}
       </ul>
+      <Link href="/" className="text-sm text-zinc-500 hover:underline">
+        홈으로 돌아가기
+      </Link>
     </div>
   );
 }

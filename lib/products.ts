@@ -15,7 +15,7 @@ const products: Product[] = [
   {
     id: "2",
     name: "웹서버보안프로그래밍 티셔츠",
-    description: "과 로고가 인쇄된 티셔츠",
+    description: "학과 로고가 인쇄된 티셔츠",
     likes: 3,
   },
   {
