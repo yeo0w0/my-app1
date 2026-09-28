@@ -1,5 +1,5 @@
-import { getNotices } from "@/lib/notices";
 import Link from "next/link";
+import { getNotices } from "@/lib/notices";
 
 export default async function NoticesPage() {
   const notices = await getNotices();
