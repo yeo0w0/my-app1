@@ -2,10 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { likeProduct as likeProductInDb } from "@/lib/products";
-import { createNotice } from "@/lib/notices";
+import { createNotice, deleteNotice, getNotice } from "@/lib/notices";
 import { redirect } from "next/navigation";
 import { createUser } from "./Users";
-import { signIn, signOut } from "@/auth";
+import { signIn, signOut, auth } from "@/auth";
 import { AuthError } from "next-auth";
 
 export async function likeProductAction(id: string) {
@@ -15,17 +15,53 @@ export async function likeProductAction(id: string) {
 }
 
 export async function createNoticeAction(formData: FormData) {
-  const title = String(formData.get("title") ?? "").trim();
-  const author = String(formData.get("author") ?? "").trim();
-  const content = String(formData.get("content") ?? "").trim();
-
-  if (!title || !author || !content) {
-    throw new Error("제목, 작성자, 내용을 모두 입력해주세요.");
+  const session = await auth();
+  if (!session?.user) {
+    redirect("/login");
   }
 
-  const notice = await createNotice({ title, author, content });
+  const title = String(formData.get("title") ?? "").trim();
+  const content = String(formData.get("content") ?? "").trim();
+
+  if (!title || !content) {
+    throw new Error("제목과 내용을 모두 입력해주세요.");
+  }
+
+  const notice = await createNotice({
+    title,
+    content,
+    authorId: session.user.id,
+    authorName: session.user.name ?? "이름 없음",
+  });
   revalidatePath("/notices");
   redirect(`/notices/${notice.id}`);
+}
+
+export async function deleteNoticeAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  if (!id) {
+    throw new Error("잘못된 요청입니다.");
+  }
+
+  const session = await auth();
+  if (!session?.user) {
+    redirect("/login");
+  }
+
+  const notice = await getNotice(id);
+  if (!notice) {
+    throw new Error("존재하지 않는 게시글입니다.");
+  }
+
+  const isOwner = notice.authorId === session.user.id;
+  const isAdmin = session.user.role === "admin";
+  if (!isOwner && !isAdmin) {
+    throw new Error("삭제 권한이 없습니다.");
+  }
+
+  await deleteNotice(id);
+  revalidatePath("/notices");
+  redirect("/notices");
 }
 
 export async function registerAction(formData: FormData) {
