@@ -1,17 +1,106 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { likeProduct as likeProductInDb } from "@/lib/products";
-import { createNotice, deleteNotice, getNotice } from "@/lib/notices";
 import { redirect } from "next/navigation";
-import { createUser } from "./Users";
-import { signIn, signOut, auth } from "@/auth";
 import { AuthError } from "next-auth";
+import { getProduct, getProductsByIds, decrementStock } from "@/lib/products";
+import {
+  addToCart,
+  updateCartQty,
+  removeFromCart,
+  getCartLines,
+  clearCart,
+} from "@/lib/cart";
+import { createOrder } from "@/lib/orders";
+import { createNotice, deleteNotice, getNotice } from "@/lib/notices";
+import { createUser } from "@/lib/Users";
+import { signIn, signOut, auth } from "@/auth";
 
-export async function likeProductAction(id: string) {
-  const newLikes = await likeProductInDb(id);
-  revalidatePath(`/products/${id}`);
-  return newLikes;
+export async function addToCartAction(formData: FormData) {
+  const productId = String(formData.get("productId") ?? "");
+  const requestedQty = Math.max(1, Number(formData.get("qty") ?? 1) || 1);
+  if (!productId) {
+    throw new Error("잘못된 상품입니다.");
+  }
+
+  const product = await getProduct(productId);
+  if (!product || product.stock === 0) {
+    throw new Error("담을 수 없는 상품입니다.");
+  }
+
+  const qty = Math.min(requestedQty, product.stock);
+  await addToCart(productId, qty);
+
+  revalidatePath("/", "layout");
+}
+
+export async function updateCartQtyAction(formData: FormData) {
+  const productId = String(formData.get("productId") ?? "");
+  const requestedQty = Number(formData.get("qty") ?? 0);
+  if (!productId) {
+    throw new Error("잘못된 상품입니다.");
+  }
+
+  if (requestedQty <= 0) {
+    await removeFromCart(productId);
+  } else {
+    const product = await getProduct(productId);
+    const qty = product ? Math.min(requestedQty, product.stock) : requestedQty;
+    await updateCartQty(productId, qty);
+  }
+
+  revalidatePath("/", "layout");
+}
+
+export async function removeFromCartAction(formData: FormData) {
+  const productId = String(formData.get("productId") ?? "");
+  if (!productId) {
+    throw new Error("잘못된 상품입니다.");
+  }
+  await removeFromCart(productId);
+  revalidatePath("/", "layout");
+}
+
+export async function checkoutAction() {
+  const session = await auth();
+  if (!session?.user) {
+    redirect("/login");
+  }
+
+  const lines = await getCartLines();
+  if (lines.length === 0) {
+    throw new Error("장바구니가 비어 있습니다.");
+  }
+
+  const products = await getProductsByIds(lines.map((line) => line.productId));
+  const items = lines
+    .map((line) => {
+      const product = products.find((p) => p.id === line.productId);
+      if (!product) return null;
+      const qty = Math.min(line.qty, product.stock);
+      if (qty <= 0) return null;
+      return {
+        productId: product.id,
+        name: product.name,
+        price: product.price,
+        qty,
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null);
+
+  if (items.length === 0) {
+    throw new Error("주문할 수 있는 상품이 없습니다(품절되었을 수 있습니다).");
+  }
+
+  const order = await createOrder(session.user.id, items);
+  await Promise.all(
+    items.map((item) => decrementStock(item.productId, item.qty)),
+  );
+  await clearCart();
+
+  revalidatePath("/", "layout");
+  revalidatePath("/orders");
+  redirect(`/orders/${order.id}`);
 }
 
 export async function createNoticeAction(formData: FormData) {

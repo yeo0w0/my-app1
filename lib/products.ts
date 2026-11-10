@@ -1,67 +1,113 @@
+import { connectDB } from "@/lib/mongoDB";
+import { Product as ProductModel } from "@/models/Product";
+
 export type Product = {
   id: string;
   name: string;
   description: string;
-  likes: number;
+  price: number;
+  emoji: string;
+  stock: number;
 };
 
-const products: Product[] = [
+type ProductDoc = {
+  _id: unknown;
+  name: string;
+  description: string;
+  price: number;
+  emoji: string;
+  stock: number;
+};
+
+function toProduct(doc: ProductDoc): Product {
+  return {
+    id: String(doc._id),
+    name: doc.name,
+    description: doc.description,
+    price: doc.price,
+    emoji: doc.emoji,
+    stock: doc.stock,
+  };
+}
+
+const SEED_PRODUCTS = [
   {
-    id: "1",
     name: "웹서버보안프로그래밍 머그컵",
     description: "수업 중 마실 커피를 위한 머그컵",
-    likes: 3,
+    price: 12000,
+    emoji: "☕",
+    stock: 42,
   },
   {
-    id: "2",
-    name: "웹서버보안프로그래밍 티셔츠",
-    description: "학과 로고가 인쇄된 티셔츠",
-    likes: 3,
+    name: "Next.js 스티커 팩",
+    description: "노트북에 붙이는 프레임워크 스티커 모음",
+    price: 5000,
+    emoji: "🏷️",
+    stock: 100,
   },
   {
-    id: "3",
-    name: "웹서버보안프로그래밍 모자",
-    description: "스타일리쉬한 모자",
-    likes: 3,
+    name: "OWASP Top 10 포스터",
+    description: "책상 앞에 붙여두는 보안 체크리스트",
+    price: 8000,
+    emoji: "🛡️",
+    stock: 30,
   },
   {
-    id: "4",
-    name: "웹서버보안프로그래밍 포스트잇",
-    description: "수업 중 간단한 메모를 위한 포스트잇",
-    likes: 3,
+    name: "기계식 키보드",
+    description: "타건감 좋은 87키 기계식 키보드",
+    price: 89000,
+    emoji: "⌨️",
+    stock: 15,
   },
   {
-    id: "5",
-    name: "웹서버보안프로그래밍 스티커",
-    description: "개인 노트북을 개성있게 꾸밀 스티커",
-    likes: 3,
-  },
-  {
-    id: "6",
-    name: "웹서버보안프로그래밍 키링",
-    description: "볼 수록 매력적인 키링",
-    likes: 3,
+    name: "노트북 거치대",
+    description: "목/어깨 건강을 지키는 알루미늄 거치대",
+    price: 32000,
+    emoji: "💻",
+    stock: 20,
   },
 ];
 
-function delay(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+async function seedIfEmpty() {
+  const count = await ProductModel.countDocuments();
+  if (count === 0) {
+    await ProductModel.insertMany(SEED_PRODUCTS);
+  }
 }
 
 export async function getProducts(): Promise<Product[]> {
-  await delay(700);
-  return products;
+  await connectDB();
+  await seedIfEmpty();
+  const docs = await ProductModel.find()
+    .sort({ createdAt: 1 })
+    .lean<ProductDoc[]>();
+  return docs.map(toProduct);
 }
 
-export async function getProduct(id: string): Promise<Product | undefined> {
-  await delay(400);
-  return products.find((p) => p.id === id);
+export async function getProduct(id: string): Promise<Product | null> {
+  await connectDB();
+  try {
+    const doc = await ProductModel.findById(id).lean<ProductDoc | null>();
+    return doc ? toProduct(doc) : null;
+  } catch {
+    return null;
+  }
 }
 
-export async function likeProduct(id: string): Promise<number> {
-  await delay(300);
-  const product = products.find((p) => p.id === id);
-  if (!product) return 0;
-  product.likes += 1;
-  return product.likes;
+export async function getProductsByIds(ids: string[]): Promise<Product[]> {
+  if (ids.length === 0) return [];
+  await connectDB();
+  try {
+    const docs = await ProductModel.find({ _id: { $in: ids } }).lean<
+      ProductDoc[]
+    >();
+    return docs.map(toProduct);
+  } catch {
+    return [];
+  }
+}
+
+export async function decrementStock(productId: string, qty: number) {
+  await connectDB();
+  await ProductModel.updateOne({ _id: productId }, { $inc: { stock: -qty } });
 }
